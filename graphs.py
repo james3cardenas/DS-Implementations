@@ -1,6 +1,7 @@
 """Python implementation of a Graph data structure."""
 
 import collections
+import types
 
 
 class Graph:
@@ -34,6 +35,53 @@ class Graph:
     self._initializeSearch(start)
     self._DFS(start)
 
+  def findCycle(self):
+    """Determines if an undirected graph contains any cycles. Specifically, if
+       there is no back edge in the undirected graph, then all edges in the
+       graph must be tree edges, and no cycle exists. Otherwise, any back edge
+       going from a Vertex X to an ancestor Vertex Y creates a cycle in the
+       graph from Vertex Y to Vertex X.
+    Returns:
+      cyclePath: a list, containing the path of the first cycle encountered in
+                 a depth first search graph traversal.
+    """
+    cyclePath = []
+    if self.directed:
+      return cyclePath
+
+    def _processEdge(self, x, y):
+      """Temporary _processEdge() override method to process each undirected
+         edge exactly once and to determine if any back edges exists and if
+         so, what cycle path that the back edge creates in the graph. *Note*:
+         processing an undirected edge exactly once is necessary to avoid False
+         positive vertex cycles, otherwise two traversals of any single
+         undirected edge (ex. (x, y) & (y, x)) would mimic a cycle. This
+         functionality can also be simulated by not processing edges for all
+         verticies that are not yet discovered in the _DFS implementation.
+      Arguments:
+        x: int, vertex X of the edge (x, y).
+        y: int, vertex Y of the edge (x, y).
+      """
+      if not self._discoveredVertex[y]:
+        print('Process tree edge: (%s, %s)\n' % (x, y))
+      elif self._discoveredVertex[y] and not self._processedVertex[y]:
+        if self._parents[x] != y:
+          print('Process back edge: (%s, %s)\n' % (x, y))
+          cyclePath.extend(self._findPath(y, x))
+          self._finished = True
+
+    # Temporarily bind nested _processEdge function to override the graph's
+    # default implementation in order to process edges and locate cycles in the
+    # appropriate manner. Execute a depth first search traversal of the
+    # graph utilizing the above defined _processEdge() function to search for
+    # cycles. Then rebind the default method after the search has completed.
+    boundProcessEdge  = self._processEdge
+    self._processEdge = types.MethodType(_processEdge, self)
+    self.depthFirstSearch()
+    self._processEdge = boundProcessEdge
+
+    return cyclePath
+
   def findShortestPathBFS(self, start, end):
     """Finds the shortest path from vertex X to vertex Y. Using the fact
        that verticies are discovered in order of increasing distance from
@@ -48,12 +96,7 @@ class Graph:
     # with start (Vertex X) as the root. Also the shortest path is only
     # given if the graph is unweighted.
     self.breadthFirstSearch(start)
-
-    shortestPath = [start]
-    while start != end and end != -1:
-      shortestPath.insert(1, end)
-      end = self._parents[end]
-    return shortestPath
+    return self._findPath(start, end)
 
   def insertEdge(self, x, y):
     """Insert an EdgeNode (x, y) into the graph.
@@ -87,8 +130,7 @@ class Graph:
 
       # Iterate through each Vertex's edges and add undiscovered
       # verticies to the queue so they can be explored.
-      vertexEdges = self.edges[vertexV]
-      for edgeNode in vertexEdges:
+      for edgeNode in self.edges[vertexV]:
         vertexU = edgeNode.y
 
         # Each edge in the graph should be processed.
@@ -117,13 +159,15 @@ class Graph:
     Arguments:
       start: int, Vertex X defining the root of the DFS search.
     """
+    if self._finished: # Support early termination of the traversal.
+      return
+
     vertexV = start
-    vertexEdges = self.edges[vertexV]
     self._discoveredVertex[vertexV] = True
 
     # Iterate through each Vertex's edges and add undiscovered
     # verticies to the recursive stack so they can be explored.
-    for edgeNode in vertexEdges:
+    for edgeNode in self.edges[vertexV]:
       vertexU = edgeNode.y
 
       # Each edge in the graph should be processed.
@@ -141,10 +185,36 @@ class Graph:
         # to an already processed vertex.
         self._processEdge(vertexV, vertexU)
 
+      if self._finished: # Support early termination of the traversal.
+        return
+
     # Each vertex in the graph should be processed.
     if not self._processedVertex[vertexV]:
       self._processedVertex[vertexV] = True
       self._processVertex(vertexV)
+
+  def _findPath(self, start, end, path=None):
+    """Constructs a path from the given end Vertex to the given start Vertex.
+       Recursively reconstruct the path by following the chain of ancestors
+       from the end Vertex to the start Vertex. *Note*: The parent relation
+       dict (_parents) must be populated in a complete graph traversal (or
+       populated enough to follow the complete parent relation for the given
+       vertices) prior to calling this method, otherwise this method may not
+       return a valid path.
+    Arguments:
+      start: int, Vertex X defining the path starting point.
+      end: int, Vertex Y defining the path end point.
+      path: list, a collections of verticies in the path from start to end.
+    """
+    if path is None:
+      path = []
+
+    if start == end or end == -1:
+      path.append(start) # TODO -> data structure that supports quick prepend.
+      return path
+    else:
+      path.append(end)   # TODO -> data structure that supports quick prepend.
+      return self._findPath(start, self._parents.get(end, -1), path)
 
   def _initializeSearch(self, start):
     """Initializer for graph traversals. Reset processing information
@@ -152,7 +222,8 @@ class Graph:
     """
     self._processedVertex  = collections.defaultdict(bool)
     self._discoveredVertex = collections.defaultdict(bool)
-    self._parents          = {start: -1}
+    self._parents          = {}
+    self._finished         = False
 
   def _insertEdge(self, x, y, directed):
     """Inserts an EdgeNode Y into X's adjacency list. If the graph is
@@ -206,12 +277,22 @@ class EdgeNode:
 
 def createGraph():
   # DELETE ME - Convienience function for testing at the moment.
-  graph = Graph()
+  # graph = Graph()
+  # graph.insertEdge(1, 2)
+  # graph.insertEdge(1, 5)
+  # graph.insertEdge(1, 6)
+  # graph.insertEdge(2, 3)
+  # graph.insertEdge(2, 5)
+  # graph.insertEdge(5, 4)
+  # graph.insertEdge(4, 3)
+
+  graph = Graph(directed=True)
   graph.insertEdge(1, 2)
-  graph.insertEdge(1, 5)
   graph.insertEdge(1, 6)
   graph.insertEdge(2, 3)
-  graph.insertEdge(2, 5)
-  graph.insertEdge(5, 4)
-  graph.insertEdge(4, 3)
+  graph.insertEdge(3, 4)
+  graph.insertEdge(4, 5)
+  # graph.insertEdge(5, 1) # Back edge
+  graph.insertEdge(5, 2) # Back edge
+
   return graph
